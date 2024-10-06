@@ -139,3 +139,6 @@ ggplot(lm_pred, aes(x = temp, y = .pred, color = solar.r, size = wind)) +
 
 
 ```
+
+# TODO:
+wykonaj prognozę dla dowolnego zestawu danych
