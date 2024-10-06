@@ -34,7 +34,7 @@ lm_mod <-
 
 lm_fit <-  
   lm_mod |>
-  fit(temp ~ wind * month, data = air)
+  fit(temp ~ wind + month, data = air)
 lm_fit  
 
 print(lm_fit, digits = 6)
@@ -101,3 +101,4 @@ lm_pred |>
   facet_wrap(~ month) +
   theme_bw() +
   labs(y = "temp")
+
