@@ -1,26 +1,141 @@
 ---
-title: "Exercise_1st"
-author: "theSPGN"
-format: html
+title: "Tidymodels Exercise First"
+author: "Mateusz Zajda"
+format: 
+  html:
+    toc: true
+    toc-title: "contents"
+    number-depth: 5
+    number-sections: true
+    code-fold: show
+    code-summary: "Hide/Show code"
+    code-tools: true
+    code-block-border-left: "black"
+    code-line-numbers: true
+    code-copy: true
+    html-math-method: katex
+    embed-resources: true
+    smooth-scroll: true
+    anchor-sections: true
+    link-external-icon: true
+    link-external-newwindow: true
+    theme: 
+      light: journal
+      dark: darkly
+    fontsize:  1.0em
+    linestretch: 1.5
+date: today
+abstract-title: "About"
+abstract: "Exercise **first**"
+execute: 
+  eval: true
+  warning: false
+  echo: true
+  output: true
+  error: false
+  cache: true
+
 ---
 
-## Quarto
+```{=html}
+<style type="text/css"> body {text-align: justify} </style>
+```
+## First exercise
+The first exercise of Tidymodels tutorial demands creating a prediction model of ozone.
+Examination of data can be proceed using ggally.
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+### Required packages
 
 ```{r}
-1 + 1
+library(tidymodels)
+library(parsnip)
+library(readr)       # data import
+library(broom.mixed) # convert data
+library(dotwhisker)  # visualization
+library(GGally)      # plot correlations
 ```
 
-You can add options to executable code like this 
+### Data preparation
 
 ```{r}
-#| echo: false
-2 * 2
+colnames(airquality) <- tolower(colnames(airquality))
+
+air <-
+  airquality |>
+  as_tibble() |>
+  na.omit() |> 
+  select(-day) |> 
+  mutate(month = factor(month)) 
+
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+### Display correlations between variables
+
+```{r}
+#| label: ggpairs plot
+#| layout-ncol: 1
+#| fig-cap: "Drawing 1.1. ggpairs plot"
+#| fig-cap-location: bottom
+air |> GGally::ggpairs()
+```
+
+The figures above suggest that there is correlation between ozone-temp and ozone-wind
+
+### Creating a linear model
+```{r}
+lm_mod <- 
+  linear_reg() |> 
+  set_engine("lm")
+
+```
+
+### Fitting the data to model
+
+```{r}
+lm_fit <-  
+  lm_mod |>
+  fit(ozone ~ (wind + temp + solar.r), data = air)
+
+coefficients <- 
+  lm_fit$fit |>  
+  summary() |> 
+  coefficients()
+
+cbind(
+  coefficients,
+  signif_stars <- signif_stars(coefficients[, 4])
+  ) |> knitr::kable()
+
+```
+
+The table above shows that the 3 variables (wind, temp and solar.r) are good predictors for ozone value.
+
+### Predictions
+```{r}
+
+new_points <- expand.grid(
+  wind = seq(5, 15, 1),
+  solar.r = seq(100, 400, 50),
+  temp = seq(70, 100, 5)
+)
+
+mean_pred <- predict(object = lm_fit, new_data = new_points)
+conf_pred <- predict(object = lm_fit, new_data = new_points, type = "conf_int")
+
+# join cols on idx
+lm_pred <- 
+  new_points |> 
+  bind_cols(mean_pred) |> 
+  bind_cols(conf_pred)
+
+# Data plot
+
+ggplot(lm_pred, aes(x = temp, y = .pred, color = solar.r, size = wind)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = .pred_lower, ymax = .pred_upper), width = 0.05) +
+  theme_bw() +
+  labs(y = "Predicted Ozone Levels", x = "Temperature", color = "Solar Radiation", size = "Wind Speed") +
+  ggtitle("Predicted Ozone Levels with Temperature, Solar Radiation, and Wind Speed")
+
+
+```

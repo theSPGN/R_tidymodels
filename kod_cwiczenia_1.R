@@ -32,7 +32,6 @@ lm_mod <-
   linear_reg() |> 
   set_engine("lm")
 
-
 lm_fit <-  
   lm_mod |>
   fit(temp ~ wind * month, data = air)
