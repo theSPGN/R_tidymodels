@@ -1,0 +1,42 @@
+---
+title: "Tidymodels Exercise second"
+author: "Mateusz Zajda"
+format: 
+  html:
+    toc: true
+    toc-title: "contents"
+    number-depth: 5
+    number-sections: true
+    code-fold: show
+    code-summary: "Hide/Show code"
+    code-tools: true
+    code-block-border-left: "black"
+    code-line-numbers: true
+    code-copy: true
+    html-math-method: katex
+    embed-resources: true
+    smooth-scroll: true
+    anchor-sections: true
+    link-external-icon: true
+    link-external-newwindow: true
+    theme: 
+      light: journal
+      dark: darkly
+    fontsize:  1.0em
+    linestretch: 1.5
+date: today
+abstract-title: "About"
+abstract: "Exercise **second**"
+execute: 
+  eval: true
+  warning: false
+  echo: true
+  output: true
+  error: false
+  cache: true
+
+---
+
+```{=html}
+<style type="text/css"> body {text-align: justify} </style>
+```
