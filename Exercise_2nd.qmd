@@ -40,3 +40,152 @@ execute:
 ```{=html}
 <style type="text/css"> body {text-align: justify} </style>
 ```
+
+## Second exercise
+The task of this exercise is to train model for ozone prediction with logistic_regresion.
+
+### Required packages
+```{r}
+library(tidymodels) 
+library(skimr) 
+library(GGally) 
+library(openair)
+library(DT) 
+tidymodels_prefer()
+```
+
+### Data preparation
+
+```{r}
+
+air <- 
+  mydata |> 
+  selectByDate(year = 2002)
+air |> skim()
+
+air <- 
+  air |> na.omit()
+```
+
+### Changing Ozone to categorical data
+
+```{r}
+air <- 
+  air |>  
+  mutate(ozone = cut(
+  o3,
+  breaks = c(-0.1, 10, 53),
+  labels = c("Niskie", "Wysokie")
+  ))
+
+air |> 
+  select_if(is.numeric) |> 
+  cor(use = "complete.obs") |> as.data.frame() |> select(o3)
+```
+
+
+### Splitting the data
+
+```{r}
+
+set.seed(222)
+data_split <- initial_split(data=air, prop = 3/4, strata = ozone)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+```
+
+### Creating recipe for ozone classification model
+
+```{r}
+ozone_recipe <- 
+  recipe(ozone ~ ., data = train_data) |> 
+  update_role(o3, wd, date, pm10, pm25, so2, co, no2, new_role = "ID") |> 
+  step_BoxCox(ws, nox, no2) |>  # daje ten sam efet co metoda Yeo-Johnson
+  # step_normalize(ws, nox, no2) |> # nie pomaga 
+  step_date(date, features = c("month")) |> 
+  step_time(date, features = c("hour")) |>
+  step_mutate(date_hour = as.factor(date_hour)) |>  
+  step_dummy(all_nominal_predictors()) |> 
+  step_zv()
+```
+
+### Examine the recipe
+
+```{r}
+ozone_recipe |> summary()
+```
+```{r}
+ozone_recipe |> 
+  prep() |> 
+  bake(new_data = train_data) |> 
+  head(10) |> 
+  DT::datatable()
+```
+
+### Defining model
+
+```{r}
+lr_mod <-  
+  logistic_reg() |> 
+  set_engine("glm")
+```
+
+### Creating workflow
+
+```{r}
+ozone_work <- 
+  workflow() |> 
+  add_model(lr_mod) |> 
+  add_recipe(ozone_recipe)
+```
+
+### Fitting data
+
+```{r}
+ozone_fit <- 
+  ozone_work |> 
+  fit(data=train_data)
+```
+
+### Examine fitting
+```{r}
+ozone_fit |> 
+  extract_fit_parsnip() |> 
+  tidy()
+```
+
+### Prediction
+
+```{r}
+ozone_fit |> 
+  predict(test_data, type="prob")
+```
+
+### Concat fit with test data
+```{r}
+pred_test <- 
+  augment(ozone_fit, test_data) |>
+  select(-ws,
+         -wd,
+         -o3,
+         -nox,
+         -no2,
+         -pm10,
+         -pm25,
+         -so2,
+         -co,
+         -date)
+pred_test
+```
+
+### Display ROC curve
+```{r}
+pred_test  |> 
+  roc_curve(truth = ozone, .pred_Niskie) |> 
+  autoplot()
+```
+### Counting 'Niskie' and 'Wysokie' values in test set and prediction set
+```{r}
+pred_test |> count(ozone)
+pred_test |> count(.pred_class)
+```
