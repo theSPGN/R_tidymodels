@@ -140,5 +140,58 @@ ggplot(lm_pred, aes(x = temp, y = .pred, color = solar.r, size = wind)) +
 
 ```
 
-# TODO:
-wykonaj prognozę dla dowolnego zestawu danych
+## Other dataset:
+
+```{r}
+set_diamonds <- ggplot2::diamonds |> 
+  as_tibble() |>
+  na.omit()
+
+set.seed(213)
+
+split <- initial_split(set_diamonds, prop = 0.99
+                       )
+train  <- training(split)
+test <-  testing(split)
+
+
+lm_mod <- 
+  linear_reg() |> 
+  set_engine("lm")
+
+lm_fit <- 
+  lm_mod |> 
+  fit(price ~ carat + cut + color + clarity, data=train)
+
+coefficients <- 
+  lm_fit$fit |>  
+  summary() |> 
+  coefficients()
+
+cbind(
+  coefficients,
+  signif_stars <- signif_stars(coefficients[, 4])
+  ) |> knitr::kable()
+
+new_points <- 
+  test |> 
+  select(carat,cut,color,clarity)
+
+mean_pred <- predict(object = lm_fit, new_data = new_points)
+conf_pred <- predict(object = lm_fit, new_data = new_points, type = "conf_int")
+
+# join cols on idx
+lm_pred <- 
+  new_points |> 
+  bind_cols(mean_pred) |> 
+  bind_cols(conf_pred)
+
+ggplot(lm_pred, aes(x = carat, y = .pred, color = color, size = clarity)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = .pred_lower, ymax = .pred_upper), width = 0.05) +
+  theme_bw() +
+  labs(y = "Predicted Price", x = "Carat", color = "Color", size = "Clarity") +
+  ggtitle("Predicted Diamond Prices with Carat, Color, and Clarity")
+
+
+```
