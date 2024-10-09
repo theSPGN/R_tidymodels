@@ -195,3 +195,5 @@ ggplot(lm_pred, aes(x = carat, y = .pred, color = color, size = clarity)) +
 
 
 ```
+
+Because we didn't make any data preparation the model makes wrong predictions (price lower then 0). The step_dummy and others would be appreciated, but it's exercise 2nd part...
