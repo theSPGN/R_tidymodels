@@ -1,5 +1,5 @@
 ---
-title: "Tidymodels Exercise second"
+title: "Tidymodels Exercise third"
 author: "Mateusz Zajda"
 format: 
   html:
@@ -26,7 +26,7 @@ format:
     linestretch: 1.5
 date: today
 abstract-title: "About"
-abstract: "Exercise **second**"
+abstract: "Exercise **third**"
 execute: 
   eval: true
   warning: false
@@ -52,6 +52,7 @@ library(GGally)
 library(openair)
 library(DT) 
 library(dplyr)
+library(ranger)
 tidymodels_prefer()
 ```
 
@@ -95,6 +96,14 @@ train_data <- training(data_split)
 test_data <- testing(data_split)
 ```
 
+### Resampling V-fold CV, bootstrap
+
+```{r}
+set.seed(345)
+vcv_folds <- vfold_cv(data=train_data, v=10)
+bootstrap_folds <- bootstraps(data=train_data, times=5)
+```
+
 ### Creating recipe for ozone classification model
 
 ```{r}
@@ -129,46 +138,61 @@ ozone_recipe |>
 lr_mod <-  
   logistic_reg() |> 
   set_engine("glm")
+
+rf_mod <-
+  rand_forest() |> 
+  set_engine("ranger") |> 
+  set_mode("classification")
 ```
 
 ### Creating workflow
+
+```{r}
+ozone_lr_work <- 
+  workflow() |> 
+  add_model(lr_mod) |> 
+  add_recipe(ozone_recipe)
+
+ozone_rf_work <- 
+  workflow() |> 
+  add_model(rf_mod) |> 
+  add_recipe(ozone_recipe)
+```
+
+### Tune
+
+```{r}
+lr_fit_vcv <- 
+  ozone_lr_work |> 
+  fit_resamples(vcv_folds)
+
+lr_fit_bootstrap <- 
+  ozone_lr_work |>
+  fit_resamples(bootstrap_folds) 
+
+rf_fit_vcv <- 
+  ozone_rf_work |> 
+  fit_resamples(vcv_folds)
+
+rf_fit_bootstrap <- 
+  ozone_rf_work |>
+  fit_resamples(bootstrap_folds) 
+```
+
+### Model without resampling
 
 ```{r}
 ozone_work <- 
   workflow() |> 
   add_model(lr_mod) |> 
   add_recipe(ozone_recipe)
-```
 
-### Fitting data
-
-```{r}
 ozone_fit <- 
   ozone_work |> 
   fit(data=train_data)
 ```
 
-### Examine fitting
-```{r}
-add_stars <- function(p_value) {
-  if (p_value < 0.001) {
-    return("***")
-  } else if (p_value < 0.01) {
-    return("**")
-  } else if (p_value < 0.05) {
-    return("*")
-  } else {
-    return("")
-  }
-}
-ozone_fit |> 
-  extract_fit_parsnip() |> 
-  tidy() |> 
-  mutate(coef_stars = sapply(p.value, add_stars)) |> 
-  print(n = Inf)
-```
-
-### Prediction
+### Prediction for model without resampling
 
 ```{r}
 ozone_fit |> 
@@ -192,6 +216,7 @@ pred_test <-
 pred_test
 ```
 
+
 ### Display ROC curve
 ```{r}
 pred_test  |> 
@@ -203,3 +228,44 @@ pred_test  |>
 pred_test |> count(ozone)
 pred_test |> count(.pred_class)
 ```
+
+### Metrics
+
+```{r}
+bind_rows(
+  pred_test |>
+    roc_auc(truth = ozone, .pred_Niskie),
+  
+  pred_test |>
+    accuracy(truth = ozone, .pred_class)
+) |>
+  knitr::kable(digits = 3)
+```
+
+### Metrics for models with resampling
+
+```{r}
+lr_fit_vcv|> 
+  collect_metrics() |> 
+  knitr::kable(digits = 3)
+```
+```{r}
+lr_fit_bootstrap|> 
+  collect_metrics() |> 
+  knitr::kable(digits = 3)
+```
+```{r}
+rf_fit_vcv|> 
+  collect_metrics() |> 
+  knitr::kable(digits = 3)
+```
+```{r}
+rf_fit_bootstrap|> 
+  collect_metrics() |> 
+  knitr::kable(digits = 3)
+```
+
+## Conslusions:
+- The resampling models accuracy and roc_auc are lower then withuot using the resampling methods but are more realistic and stable;
+- Accuracy of the models with using the resampling methods equals around 90%, all of the models are almost exacly the same good for this prediction case;
+- In this case best resampling model was the one that included logistic_regression and V-fold Cross-Validation and the worst was the one with RandomForest model and bootstrap resampling method;
