@@ -51,6 +51,7 @@ library(skimr)
 library(GGally) 
 library(openair)
 library(DT) 
+library(dplyr)
 tidymodels_prefer()
 ```
 
@@ -149,9 +150,22 @@ ozone_fit <-
 
 ### Examine fitting
 ```{r}
+add_stars <- function(p_value) {
+  if (p_value < 0.001) {
+    return("***")
+  } else if (p_value < 0.01) {
+    return("**")
+  } else if (p_value < 0.05) {
+    return("*")
+  } else {
+    return("")
+  }
+}
 ozone_fit |> 
   extract_fit_parsnip() |> 
-  tidy()
+  tidy() |> 
+  mutate(coef_stars = sapply(p.value, add_stars)) |> 
+  print(n = Inf)
 ```
 
 ### Prediction
