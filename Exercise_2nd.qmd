@@ -34,8 +34,8 @@ execute:
   echo: true
   output: true
   error: false
-  cache: true
-
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{=html}
@@ -116,11 +116,13 @@ ozone_recipe <-
 ```{r}
 ozone_recipe |> summary()
 ```
+
 ```{r}
 ozone_recipe |> 
   prep() |> 
   bake(new_data = train_data) |> 
   head(10) |> 
+  mutate_if(is.numeric, round, 2) |>
   DT::datatable()
 ```
 
@@ -150,23 +152,18 @@ ozone_fit <-
 ```
 
 ### Examine fitting
+
+Jak widzisz, moja metoda działa, nie trzeba za dużo kombinować, ale zacnie to wyglądało. Brawo, doceniam to. Tak trzymaj! Nauczysz się jeszcze wielu rzeczy, ale na razie jesteś na dobrej drodze.
+
 ```{r}
-add_stars <- function(p_value) {
-  if (p_value < 0.001) {
-    return("***")
-  } else if (p_value < 0.01) {
-    return("**")
-  } else if (p_value < 0.05) {
-    return("*")
-  } else {
-    return("")
-  }
-}
-ozone_fit |> 
-  extract_fit_parsnip() |> 
-  tidy() |> 
-  mutate(coef_stars = sapply(p.value, add_stars)) |> 
-  print(n = Inf)
+ozone_fit |>
+  extract_fit_parsnip() |>
+  tidy() |>
+  mutate(coef_stars = signif_stars(p.value)) |>
+  print(n = Inf) |>
+  gt::gt() |>
+  gt::fmt_number(decimals = 2) |>
+  gt::fmt_scientific(columns = c(p.value))
 ```
 
 ### Prediction
@@ -194,13 +191,38 @@ pred_test
 ```
 
 ### Display ROC curve
+
 ```{r}
 pred_test  |> 
   roc_curve(truth = ozone, .pred_Niskie) |> 
   autoplot()
 ```
+
 ### Counting 'Niskie' and 'Wysokie' values in test set and prediction set
+
 ```{r}
 pred_test |> count(ozone)
 pred_test |> count(.pred_class)
+
+
 ```
+
+### Liczby Oceny modelu 
+
+```{r}
+augment(ozone_fit, train_data) |> 
+  metrics(truth = ozone, estimate = .pred_class)
+
+pred_test |> 
+  metrics(truth = ozone, estimate = .pred_class)
+
+```
+
+Ciekawe, lepszy na zbiorze testowy niż treningowy. Czy to ma sens? Raczej nie, szczególnie że model ma wiele zmiennych nieistotnych.
+
+```{r}
+pred_test |> 
+  roc_auc(truth = ozone, .pred_Niskie)
+```
+
+Uzyskałem takie samą powierzchnie pod krzywą jak ty. Więc jest ok. Ale chyba wysyłaem co reicpe jeśli dobrze pamiętam, bo ten sam kod. 
