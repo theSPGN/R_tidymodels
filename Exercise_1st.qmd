@@ -14,7 +14,6 @@ format:
     code-line-numbers: true
     code-copy: true
     html-math-method: katex
-    embed-resources: true
     smooth-scroll: true
     self-contained: true
     anchor-sections: true
@@ -34,8 +33,8 @@ execute:
   echo: true
   output: true
   error: false
-  cache: true
-
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{=html}
@@ -97,16 +96,12 @@ lm_fit <-
   lm_mod |>
   fit(ozone ~ (wind + temp + solar.r), data = air)
 
-coefficients <- 
-  lm_fit$fit |>  
-  summary() |> 
-  coefficients()
-
-cbind(
-  coefficients,
-  signif_stars <- signif_stars(coefficients[, 4])
-  ) |> knitr::kable()
-
+lm_fit$fit |>
+  tidy() |>
+  mutate(starts = signif_stars(p.value)) |> 
+  gt::gt() |> 
+  gt::fmt_number(decimals = 2) |> 
+  gt::fmt_scientific(columns = c(p.value))
 ```
 
 The table above shows that the 3 variables (wind, temp and solar.r) are good predictors for ozone value.
@@ -115,7 +110,7 @@ The table above shows that the 3 variables (wind, temp and solar.r) are good pre
 ```{r}
 
 new_points <- expand.grid(
-  wind = seq(5, 15, 1),
+  wind = seq(5, 15, 3),
   solar.r = seq(100, 400, 50),
   temp = seq(70, 100, 5)
 )
@@ -130,18 +125,32 @@ lm_pred <-
   bind_cols(conf_pred)
 
 # Data plot
-
-ggplot(lm_pred, aes(x = temp, y = .pred, color = solar.r, size = wind)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = .pred_lower, ymax = .pred_upper), width = 0.05) +
+lm_pred |>
+  ggplot(aes(
+    x = temp,
+    y = .pred,
+    color = factor(solar.r),
+    group = factor(solar.r),
+  )) +
+  geom_point(position=position_dodge(width=4)) +
+  geom_errorbar(aes(ymin = .pred_lower, ymax = .pred_upper),
+                width = 0.05,
+                position=position_dodge(width=4)) +
   theme_bw() +
-  labs(y = "Predicted Ozone Levels", x = "Temperature", color = "Solar Radiation", size = "Wind Speed") +
+  facet_wrap(~factor(wind)) +
+  labs(y = "Predicted Ozone Levels",
+       x = "Temperature",
+       color = "Solar Radiation",
+       size = "Wind Speed") +
   ggtitle("Predicted Ozone Levels with Temperature, Solar Radiation, and Wind Speed")
-
-
 ```
 
+Ograniczyłem zbiór danych, umościłeś mnóstwo punktów w jednym miejscu. Wykres był nieczytelny.
+Teraz jest kilka punktów do tego z odsunięciem `position`. Jest to klarowniejsze.  
+
 ## Other dataset:
+
+Zastosowałem zupełnie inne rozwiązanie, ponieważ podzieliłeś zestaw danych na testowy i treningowy. Więc analiza powinna być inna. 
 
 ```{r}
 set_diamonds <- ggplot2::diamonds |> 
@@ -178,23 +187,21 @@ new_points <-
   test |> 
   select(carat,cut,color,clarity)
 
-mean_pred <- predict(object = lm_fit, new_data = new_points)
-conf_pred <- predict(object = lm_fit, new_data = new_points, type = "conf_int")
+pred_train <- augment(lm_fit, new_data = train) |> mutate(set = "train")
+pred_test <- augment(lm_fit, new_data = test) |> mutate(set = "test")
 
 # join cols on idx
-lm_pred <- 
-  new_points |> 
-  bind_cols(mean_pred) |> 
-  bind_cols(conf_pred)
 
-ggplot(lm_pred, aes(x = carat, y = .pred, color = color, size = clarity)) +
+evaluation_set <- bind_rows(pred_train, pred_test)
+
+evaluation_set |> 
+  ggplot(aes(x = price, y = .pred, color = color, size = clarity)) +
   geom_point() +
-  geom_errorbar(aes(ymin = .pred_lower, ymax = .pred_upper), width = 0.05) +
+  geom_abline(slope = c(1, 2, 0.5)) +
   theme_bw() +
+  facet_wrap(~set) +
   labs(y = "Predicted Price", x = "Carat", color = "Color", size = "Clarity") +
   ggtitle("Predicted Diamond Prices with Carat, Color, and Clarity")
-
-
 ```
 
 Because we didn't make any data preparation the model makes wrong predictions (price lower then 0). The step_dummy and others would be appreciated, but it's exercise 2nd part...
