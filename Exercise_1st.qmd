@@ -200,7 +200,7 @@ evaluation_set |>
   geom_abline(slope = c(1, 2, 0.5)) +
   theme_bw() +
   facet_wrap(~set) +
-  labs(y = "Predicted Price", x = "Carat", color = "Color", size = "Clarity") +
+  labs(y = "Predicted Price", x = "price", color = "Color", size = "Clarity") +
   ggtitle("Predicted Diamond Prices with Carat, Color, and Clarity")
 ```
 
