@@ -14,7 +14,6 @@ format:
     code-line-numbers: true
     code-copy: true
     html-math-method: katex
-    embed-resources: true
     smooth-scroll: true
     self-contained: true
     anchor-sections: true
@@ -34,8 +33,8 @@ execute:
   echo: true
   output: true
   error: false
-  cache: true
-
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{=html}
@@ -99,9 +98,12 @@ test_data <- testing(data_split)
 
 ### Resampling V-fold CV, bootstrap
 
+A ja mam 3 przypadki. 
+
 ```{r}
 set.seed(345)
 vcv_folds <- vfold_cv(data=train_data, v=10)
+vcv_folds <- vfold_cv(data=train_data, v=10, repeats = 5)
 bootstrap_folds <- bootstraps(data=train_data, times=5)
 ```
 
@@ -182,6 +184,8 @@ rf_fit_bootstrap <-
 
 ### Model without resampling
 
+A o tym nie pomyślałem, dodajmy to.
+
 ```{r}
 ozone_work <- 
   workflow() |> 
@@ -245,6 +249,8 @@ bind_rows(
 
 ### Metrics for models with resampling
 
+Czy nie można dac tego w jednej tabeli i łądnie ja wyświetlić i opisać. Po co generować kilka tabel, Kto zapamieta twoje zonaczenia. 
+
 ```{r}
 lr_fit_vcv|> 
   collect_metrics() |> 
@@ -270,3 +276,8 @@ rf_fit_bootstrap|>
 - The resampling models accuracy and roc_auc are lower then withuot using the resampling methods but are more realistic and stable;
 - Accuracy of the models with using the resampling methods equals around 90%, all of the models are almost exacly the same good for this prediction case;
 - In this case best resampling model was the one that included logistic_regression and V-fold Cross-Validation and the worst was the one with RandomForest model and bootstrap resampling method;
+
+
+Ja po mojej analizie doszedłem do następującego wniosku, a czy ty możesz stwierdzić to samo. 
+
+Wnioski nie każda metoda estymacji wymaga stosowania metody ponownego próbkowania. W przypadku prostej metody regresji logistycznej uzyskano podobne efekty. W przypadku metody lasu losowego efekty są wyraźne. Wyniki oceny dla zbioru treningowego wskazują na nadmierne dopasowanie w porównaniu do testowego.

@@ -1,8 +1,7 @@
 # QUarto renderowanie
 /.quarto/
 *.html
-
-
+*.Rproj
 
 # History files
 .Rhistory
