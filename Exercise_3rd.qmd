@@ -235,41 +235,56 @@ pred_test |> count(.pred_class)
 ```
 
 ### Metrics
-
 ```{r}
-bind_rows(
+metrics_without_resample <- bind_rows(
   pred_test |>
     roc_auc(truth = ozone, .pred_Niskie),
   
   pred_test |>
     accuracy(truth = ozone, .pred_class)
 ) |>
-  knitr::kable(digits = 3)
+  mutate(.approach = "no resampling") 
 ```
 
 ### Metrics for models with resampling
 
-Czy nie można dac tego w jednej tabeli i łądnie ja wyświetlić i opisać. Po co generować kilka tabel, Kto zapamieta twoje zonaczenia. 
+```{r}
+metrics_lr_vcv <- lr_fit_vcv|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "lr_vcv")
+```
+```{r}
+metrics_lr_bootstrap <- lr_fit_bootstrap|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "lr_bootstrap")
+```
+```{r}
+metrics_rf_vcv <- rf_fit_vcv|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_vcv")
+```
+```{r}
+metrics_rf_bootstrap <- rf_fit_bootstrap|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_bootstrap")
+```
 
 ```{r}
-lr_fit_vcv|> 
-  collect_metrics() |> 
-  knitr::kable(digits = 3)
-```
-```{r}
-lr_fit_bootstrap|> 
-  collect_metrics() |> 
-  knitr::kable(digits = 3)
-```
-```{r}
-rf_fit_vcv|> 
-  collect_metrics() |> 
-  knitr::kable(digits = 3)
-```
-```{r}
-rf_fit_bootstrap|> 
-  collect_metrics() |> 
-  knitr::kable(digits = 3)
+# Combine all metrics into one large table
+all_metrics <- bind_rows(
+  metrics_without_resample,
+  metrics_lr_vcv,
+  metrics_lr_bootstrap,
+  metrics_rf_vcv,
+  metrics_rf_bootstrap
+)
+
+# Display the combined table
+all_metrics |> knitr::kable(digits = 3)
 ```
 
 ## Conslusions:
