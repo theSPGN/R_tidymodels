@@ -98,12 +98,10 @@ test_data <- testing(data_split)
 
 ### Resampling V-fold CV, bootstrap
 
-A ja mam 3 przypadki. 
-
 ```{r}
 set.seed(345)
 vcv_folds <- vfold_cv(data=train_data, v=10)
-vcv_folds <- vfold_cv(data=train_data, v=10, repeats = 5)
+vcv_folds_r5 <- vfold_cv(data=train_data, v=10, repeats = 5)
 bootstrap_folds <- bootstraps(data=train_data, times=5)
 ```
 
@@ -173,6 +171,10 @@ lr_fit_bootstrap <-
   ozone_lr_work |>
   fit_resamples(bootstrap_folds) 
 
+lr_fit_vcv_r5 <- 
+  ozone_lr_work |> 
+  fit_resamples(vcv_folds_r5)
+
 rf_fit_vcv <- 
   ozone_rf_work |> 
   fit_resamples(vcv_folds)
@@ -180,11 +182,13 @@ rf_fit_vcv <-
 rf_fit_bootstrap <- 
   ozone_rf_work |>
   fit_resamples(bootstrap_folds) 
+
+rf_fit_vcv_r5 <- 
+  ozone_rf_work |> 
+  fit_resamples(vcv_folds_r5)
 ```
 
 ### Model without resampling
-
-A o tym nie pomyślałem, dodajmy to.
 
 ```{r}
 ozone_work <- 
@@ -243,7 +247,7 @@ metrics_without_resample <- bind_rows(
   pred_test |>
     accuracy(truth = ozone, .pred_class)
 ) |>
-  mutate(.approach = "no resampling") 
+  mutate(.approach = "no resampling")
 ```
 
 ### Metrics for models with resampling
@@ -253,6 +257,12 @@ metrics_lr_vcv <- lr_fit_vcv|>
   collect_metrics() |> 
   filter(.metric == "accuracy" | .metric == "roc_auc") |>
   mutate(.approach = "lr_vcv")
+```
+```{r}
+metrics_lr_vcv_r5 <- lr_fit_vcv_r5|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "lr_vcv_r5")
 ```
 ```{r}
 metrics_lr_bootstrap <- lr_fit_bootstrap|> 
@@ -267,6 +277,13 @@ metrics_rf_vcv <- rf_fit_vcv|>
   mutate(.approach = "rf_vcv")
 ```
 ```{r}
+metrics_rf_vcv_r5 <- rf_fit_vcv_r5|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_vcv_r5")
+```
+
+```{r}
 metrics_rf_bootstrap <- rf_fit_bootstrap|> 
   collect_metrics() |> 
   filter(.metric == "accuracy" | .metric == "roc_auc") |>
@@ -278,10 +295,22 @@ metrics_rf_bootstrap <- rf_fit_bootstrap|>
 all_metrics <- bind_rows(
   metrics_without_resample,
   metrics_lr_vcv,
+  metrics_lr_vcv_r5,
   metrics_lr_bootstrap,
   metrics_rf_vcv,
+  metrics_rf_vcv_r5,
   metrics_rf_bootstrap
 )
+
+colnames(all_metrics)[
+  which(names(all_metrics) == ".estimate" |
+  names(all_metrics) == "mean")] <- "estimate/mean"
+
+columns_list <- lapply(
+  all_metrics, 
+  function(x) if(is.numeric(x)) 0 else "not applicable")
+
+all_metrics <- all_metrics |> replace_na(columns_list)
 
 # Display the combined table
 all_metrics |> knitr::kable(digits = 3)
