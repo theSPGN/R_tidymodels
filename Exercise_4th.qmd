@@ -1,5 +1,5 @@
 ---
-title: "Tidymodels Exercise third"
+title: "Tidymodels Exercise fourth"
 author: "Mateusz Zajda"
 format: 
   html:
@@ -42,17 +42,19 @@ editor_options:
 ```
 
 ## Second exercise
-The task of this exercise is to train model for ozone prediction with logistic_regresion.
+The task of this exercise is to train model for ozone prediction with random forest that is tuned.
 
 ### Required packages
 ```{r}
 library(tidymodels) 
 library(skimr) 
+library(vip)
 library(GGally) 
 library(openair)
 library(DT) 
 library(dplyr)
 library(ranger)
+library(yardstick)
 tidymodels_prefer()
 ```
 
@@ -104,14 +106,34 @@ ggplot(train_data, aes(x = date, y = o3)) +
   theme_minimal()
 ```
 
+### Define Hyper parameters to tune
 
-### Resampling V-fold CV, bootstrap
+```{r}
+tune_spec <- 
+  decision_tree(
+    cost_complexity = tune(), 
+    tree_depth = tune()) |> 
+  set_engine("rpart") |> 
+  set_mode("classification")
+```
+
+
+### Define regular grid
+
+```{r}
+reg_grid  <- grid_regular(
+  cost_complexity(),
+  tree_depth(),
+  levels=5)
+
+reg_grid
+```
+
+### Resampling V-fold CV
 
 ```{r}
 set.seed(345)
-vcv_folds <- vfold_cv(data=train_data, v=10)
 vcv_folds_r5 <- vfold_cv(data=train_data, v=10, repeats = 5)
-bootstrap_folds <- bootstraps(data=train_data, times=5)
 ```
 
 ### Creating recipe for ozone classification model
@@ -134,6 +156,7 @@ ozone_recipe <-
 ```{r}
 ozone_recipe |> summary()
 ```
+
 ```{r}
 ozone_recipe |> 
   prep() |> 
@@ -142,13 +165,9 @@ ozone_recipe |>
   DT::datatable()
 ```
 
-### Defining model
+### Defining model without tuning
 
 ```{r}
-lr_mod <-  
-  logistic_reg() |> 
-  set_engine("glm")
-
 rf_mod <-
   rand_forest() |> 
   set_engine("ranger") |> 
@@ -158,48 +177,104 @@ rf_mod <-
 ### Creating workflow
 
 ```{r}
-ozone_lr_work <- 
-  workflow() |> 
-  add_model(lr_mod) |> 
-  add_recipe(ozone_recipe)
-
 ozone_rf_work <- 
   workflow() |> 
   add_model(rf_mod) |> 
   add_recipe(ozone_recipe)
+
+tune_work  <- 
+  workflow() |> 
+  add_model(tune_spec) |> 
+  add_recipe(ozone_recipe)
 ```
 
-### Tune
+### Fitting for resampling only
 
 ```{r}
-lr_fit_vcv <- 
-  ozone_lr_work |> 
-  fit_resamples(vcv_folds)
-
-lr_fit_bootstrap <- 
-  ozone_lr_work |>
-  fit_resamples(bootstrap_folds) 
-
-lr_fit_vcv_r5 <- 
-  ozone_lr_work |> 
-  fit_resamples(vcv_folds_r5)
-
-rf_fit_vcv <- 
-  ozone_rf_work |> 
-  fit_resamples(vcv_folds)
-
-rf_fit_bootstrap <- 
-  ozone_rf_work |>
-  fit_resamples(bootstrap_folds) 
-
 rf_fit_vcv_r5 <- 
   ozone_rf_work |> 
   fit_resamples(vcv_folds_r5)
 ```
 
-### Model without resampling
+### Fitting for tuning and resampling
+```{r}
+examination_metrics  <- 
+  yardstick::metric_set(
+    accuracy,
+    mcc,
+    npv,
+    roc_auc
+  )
+
+tune_fit <- tune_work |> 
+  tune_grid(
+    resamples=vcv_folds_r5,
+    grid=reg_grid,
+    metrics=examination_metrics
+  )
+tune_fit
+```
+
+### Metrics for tuning and resampling
+```{r}
+tune_fit  |> collect_metrics()
+```
 
 ```{r}
+tune_fit |> 
+  collect_metrics() |>
+  mutate(tree_depth = factor(tree_depth)) |>
+  ggplot(aes(cost_complexity, mean, color = tree_depth)) +
+  geom_line(size = 1.5, alpha = 0.6) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_x_log10(labels = scales::label_number()) +
+  scale_color_viridis_d(option = "plasma", begin = .9, end = 0)
+```
+
+```{r}
+tune_fit |> show_best(metric="accuracy")
+```
+
+### Create best tuning model
+
+```{r}
+best_accuracy  <- tune_fit |> 
+  select_best(metric="accuracy")
+
+tune_best_mod  <- tune_work  |> 
+  finalize_workflow(best_accuracy)
+```
+
+### Fitting best tuning model
+
+```{r}
+tune_best_fit <- 
+  tune_best_mod |> 
+  last_fit(split=data_split)
+
+tune_best_fit |> 
+  collect_predictions() |> 
+  roc_curve(truth = ozone, .pred_Niskie) |> 
+  autoplot()
+```
+
+### Importance of parameters
+```{r}
+tune_best_fit |> 
+  extract_workflow() |> 
+  extract_fit_parsnip() |>
+  vip() 
+```
+
+### Model without resampling & tuning
+
+```{r}
+
+lr_mod <-  
+  logistic_reg() |> 
+  set_engine("glm")
+
 ozone_work <- 
   workflow() |> 
   add_model(lr_mod) |> 
@@ -209,6 +284,7 @@ ozone_fit <-
   ozone_work |> 
   fit(data=train_data)
 ```
+
 
 ### Prediction for model without resampling
 
@@ -259,78 +335,34 @@ metrics_without_resample <- bind_rows(
   mutate(.approach = "no resampling")
 ```
 
-### Metrics for models with resampling
+### Metrics for model with resampling
 
 ```{r}
-metrics_lr_vcv <- lr_fit_vcv|> 
-  collect_metrics() |> 
-  filter(.metric == "accuracy" | .metric == "roc_auc") |>
-  mutate(.approach = "lr_vcv")
-```
-```{r}
-metrics_lr_vcv_r5 <- lr_fit_vcv_r5|> 
-  collect_metrics() |> 
-  filter(.metric == "accuracy" | .metric == "roc_auc") |>
-  mutate(.approach = "lr_vcv_r5")
-```
-```{r}
-metrics_lr_bootstrap <- lr_fit_bootstrap|> 
-  collect_metrics() |> 
-  filter(.metric == "accuracy" | .metric == "roc_auc") |>
-  mutate(.approach = "lr_bootstrap")
-```
-```{r}
-metrics_rf_vcv <- rf_fit_vcv|> 
-  collect_metrics() |> 
-  filter(.metric == "accuracy" | .metric == "roc_auc") |>
-  mutate(.approach = "rf_vcv")
-```
-```{r}
-metrics_rf_vcv_r5 <- rf_fit_vcv_r5|> 
+metrics_rf_vcv_r5 <- rf_fit_vcv_r5 |> 
   collect_metrics() |> 
   filter(.metric == "accuracy" | .metric == "roc_auc") |>
   mutate(.approach = "rf_vcv_r5")
 ```
 
+### Metrics for model with resampling and tuning
+
 ```{r}
-metrics_rf_bootstrap <- rf_fit_bootstrap|> 
+metrics_tune  <- tune_best_fit |> 
   collect_metrics() |> 
   filter(.metric == "accuracy" | .metric == "roc_auc") |>
-  mutate(.approach = "rf_bootstrap")
+  mutate(.approach = "tune")
 ```
 
 ```{r}
 # Combine all metrics into one large table
 all_metrics <- bind_rows(
   metrics_without_resample,
-  metrics_lr_vcv,
-  metrics_lr_vcv_r5,
-  metrics_lr_bootstrap,
-  metrics_rf_vcv,
   metrics_rf_vcv_r5,
-  metrics_rf_bootstrap
+  metrics_tune
 )
 
-colnames(all_metrics)[
-  which(names(all_metrics) == ".estimate" |
-  names(all_metrics) == "mean")] <- "estimate/mean"
-
-columns_list <- lapply(
-  all_metrics, 
-  function(x) if(is.numeric(x)) 0 else "not applicable")
-
-all_metrics <- all_metrics |> replace_na(columns_list)
-
-# Display the combined table
 all_metrics |> knitr::kable(digits = 3)
 ```
 
 ## Conslusions:
-- The resampling models accuracy and roc_auc are lower then withuot using the resampling methods but are more realistic and stable;
-- Accuracy of the models with using the resampling methods equals around 90%, all of the models are almost exacly the same good for this prediction case;
-- In this case best resampling model was the one that included logistic_regression and V-fold Cross-Validation and the worst was the one with RandomForest model and bootstrap resampling method;
-
-
-Ja po mojej analizie doszedłem do następującego wniosku, a czy ty możesz stwierdzić to samo. 
-
-Wnioski nie każda metoda estymacji wymaga stosowania metody ponownego próbkowania. W przypadku prostej metody regresji logistycznej uzyskano podobne efekty. W przypadku metody lasu losowego efekty są wyraźne. Wyniki oceny dla zbioru treningowego wskazują na nadmierne dopasowanie w porównaniu do testowego.
+- The tuning is usefull tool for examinate what model parameters should be used
