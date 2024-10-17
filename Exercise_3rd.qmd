@@ -96,6 +96,15 @@ train_data <- training(data_split)
 test_data <- testing(data_split)
 ```
 
+### checking the data
+
+```{r}
+ggplot(train_data, aes(x = date, y = o3)) + 
+  geom_line() + 
+  theme_minimal()
+```
+
+
 ### Resampling V-fold CV, bootstrap
 
 ```{r}
