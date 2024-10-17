@@ -1,0 +1,368 @@
+---
+title: "Tidymodels Exercise fourth"
+author: "Mateusz Zajda"
+format: 
+  html:
+    toc: true
+    toc-title: "contents"
+    number-depth: 5
+    number-sections: true
+    code-fold: show
+    code-summary: "Hide/Show code"
+    code-tools: true
+    code-block-border-left: "black"
+    code-line-numbers: true
+    code-copy: true
+    html-math-method: katex
+    smooth-scroll: true
+    self-contained: true
+    anchor-sections: true
+    link-external-icon: true
+    link-external-newwindow: true
+    theme: 
+      light: journal
+      dark: darkly
+    fontsize:  1.0em
+    linestretch: 1.5
+date: today
+abstract-title: "About"
+abstract: "Exercise **third**"
+execute: 
+  eval: true
+  warning: false
+  echo: true
+  output: true
+  error: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{=html}
+<style type="text/css"> body {text-align: justify} </style>
+```
+
+## Second exercise
+The task of this exercise is to train model for ozone prediction with random forest that is tuned.
+
+### Required packages
+```{r}
+library(tidymodels) 
+library(skimr) 
+library(vip)
+library(GGally) 
+library(openair)
+library(DT) 
+library(dplyr)
+library(ranger)
+library(yardstick)
+tidymodels_prefer()
+```
+
+### Data preparation
+
+```{r}
+
+air <- 
+  mydata |> 
+  selectByDate(year = 2002)
+air |> skim()
+
+air <- 
+  air |> na.omit()
+```
+
+### Changing Ozone to categorical data
+
+```{r}
+air <- 
+  air |>  
+  mutate(ozone = cut(
+  o3,
+  breaks = c(-0.1, 10, 53),
+  labels = c("Niskie", "Wysokie")
+  ))
+
+air |> 
+  select_if(is.numeric) |> 
+  cor(use = "complete.obs") |> as.data.frame() |> select(o3)
+```
+
+
+### Splitting the data
+
+```{r}
+
+set.seed(222)
+data_split <- initial_split(data=air, prop = 3/4, strata = ozone)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+```
+
+### checking the data
+
+```{r}
+ggplot(train_data, aes(x = date, y = o3)) + 
+  geom_line() + 
+  theme_minimal()
+```
+
+### Define Hyper parameters to tune
+
+```{r}
+tune_spec <- 
+  decision_tree(
+    cost_complexity = tune(), 
+    tree_depth = tune()) |> 
+  set_engine("rpart") |> 
+  set_mode("classification")
+```
+
+
+### Define regular grid
+
+```{r}
+reg_grid  <- grid_regular(
+  cost_complexity(),
+  tree_depth(),
+  levels=5)
+
+reg_grid
+```
+
+### Resampling V-fold CV
+
+```{r}
+set.seed(345)
+vcv_folds_r5 <- vfold_cv(data=train_data, v=10, repeats = 5)
+```
+
+### Creating recipe for ozone classification model
+
+```{r}
+ozone_recipe <- 
+  recipe(ozone ~ ., data = train_data) |> 
+  update_role(o3, wd, date, pm10, pm25, so2, co, no2, new_role = "ID") |> 
+  step_BoxCox(ws, nox, no2) |>  # daje ten sam efet co metoda Yeo-Johnson
+  # step_normalize(ws, nox, no2) |> # nie pomaga 
+  step_date(date, features = c("month")) |> 
+  step_time(date, features = c("hour")) |>
+  step_mutate(date_hour = as.factor(date_hour)) |>  
+  step_dummy(all_nominal_predictors()) |> 
+  step_zv()
+```
+
+### Examine the recipe
+
+```{r}
+ozone_recipe |> summary()
+```
+
+```{r}
+ozone_recipe |> 
+  prep() |> 
+  bake(new_data = train_data) |> 
+  head(10) |> 
+  DT::datatable()
+```
+
+### Defining model without tuning
+
+```{r}
+rf_mod <-
+  rand_forest() |> 
+  set_engine("ranger") |> 
+  set_mode("classification")
+```
+
+### Creating workflow
+
+```{r}
+ozone_rf_work <- 
+  workflow() |> 
+  add_model(rf_mod) |> 
+  add_recipe(ozone_recipe)
+
+tune_work  <- 
+  workflow() |> 
+  add_model(tune_spec) |> 
+  add_recipe(ozone_recipe)
+```
+
+### Fitting for resampling only
+
+```{r}
+rf_fit_vcv_r5 <- 
+  ozone_rf_work |> 
+  fit_resamples(vcv_folds_r5)
+```
+
+### Fitting for tuning and resampling
+```{r}
+examination_metrics  <- 
+  yardstick::metric_set(
+    accuracy,
+    mcc,
+    npv,
+    roc_auc
+  )
+
+tune_fit <- tune_work |> 
+  tune_grid(
+    resamples=vcv_folds_r5,
+    grid=reg_grid,
+    metrics=examination_metrics
+  )
+tune_fit
+```
+
+### Metrics for tuning and resampling
+```{r}
+tune_fit  |> collect_metrics()
+```
+
+```{r}
+tune_fit |> 
+  collect_metrics() |>
+  mutate(tree_depth = factor(tree_depth)) |>
+  ggplot(aes(cost_complexity, mean, color = tree_depth)) +
+  geom_line(size = 1.5, alpha = 0.6) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_x_log10(labels = scales::label_number()) +
+  scale_color_viridis_d(option = "plasma", begin = .9, end = 0)
+```
+
+```{r}
+tune_fit |> show_best(metric="accuracy")
+```
+
+### Create best tuning model
+
+```{r}
+best_accuracy  <- tune_fit |> 
+  select_best(metric="accuracy")
+
+tune_best_mod  <- tune_work  |> 
+  finalize_workflow(best_accuracy)
+```
+
+### Fitting best tuning model
+
+```{r}
+tune_best_fit <- 
+  tune_best_mod |> 
+  last_fit(split=data_split)
+
+tune_best_fit |> 
+  collect_predictions() |> 
+  roc_curve(truth = ozone, .pred_Niskie) |> 
+  autoplot()
+```
+
+### Importance of parameters
+```{r}
+tune_best_fit |> 
+  extract_workflow() |> 
+  extract_fit_parsnip() |>
+  vip() 
+```
+
+### Model without resampling & tuning
+
+```{r}
+
+lr_mod <-  
+  logistic_reg() |> 
+  set_engine("glm")
+
+ozone_work <- 
+  workflow() |> 
+  add_model(lr_mod) |> 
+  add_recipe(ozone_recipe)
+
+ozone_fit <- 
+  ozone_work |> 
+  fit(data=train_data)
+```
+
+
+### Prediction for model without resampling
+
+```{r}
+ozone_fit |> 
+  predict(test_data, type="prob")
+```
+
+### Concat fit with test data
+```{r}
+pred_test <- 
+  augment(ozone_fit, test_data) |>
+  select(-ws,
+         -wd,
+         -o3,
+         -nox,
+         -no2,
+         -pm10,
+         -pm25,
+         -so2,
+         -co,
+         -date)
+pred_test
+```
+
+
+### Display ROC curve
+```{r}
+pred_test  |> 
+  roc_curve(truth = ozone, .pred_Niskie) |> 
+  autoplot()
+```
+### Counting 'Niskie' and 'Wysokie' values in test set and prediction set
+```{r}
+pred_test |> count(ozone)
+pred_test |> count(.pred_class)
+```
+
+### Metrics
+```{r}
+metrics_without_resample <- bind_rows(
+  pred_test |>
+    roc_auc(truth = ozone, .pred_Niskie),
+  
+  pred_test |>
+    accuracy(truth = ozone, .pred_class)
+) |>
+  mutate(.approach = "no resampling")
+```
+
+### Metrics for model with resampling
+
+```{r}
+metrics_rf_vcv_r5 <- rf_fit_vcv_r5 |> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_vcv_r5")
+```
+
+### Metrics for model with resampling and tuning
+
+```{r}
+metrics_tune  <- tune_best_fit |> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "tune")
+```
+
+```{r}
+# Combine all metrics into one large table
+all_metrics <- bind_rows(
+  metrics_without_resample,
+  metrics_rf_vcv_r5,
+  metrics_tune
+)
+
+all_metrics |> knitr::kable(digits = 3)
+```
+
+## Conslusions:
+- The tuning is usefull tool for examinate what model parameters should be used
