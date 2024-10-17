@@ -1,0 +1,336 @@
+---
+title: "Tidymodels Exercise third"
+author: "Mateusz Zajda"
+format: 
+  html:
+    toc: true
+    toc-title: "contents"
+    number-depth: 5
+    number-sections: true
+    code-fold: show
+    code-summary: "Hide/Show code"
+    code-tools: true
+    code-block-border-left: "black"
+    code-line-numbers: true
+    code-copy: true
+    html-math-method: katex
+    smooth-scroll: true
+    self-contained: true
+    anchor-sections: true
+    link-external-icon: true
+    link-external-newwindow: true
+    theme: 
+      light: journal
+      dark: darkly
+    fontsize:  1.0em
+    linestretch: 1.5
+date: today
+abstract-title: "About"
+abstract: "Exercise **third**"
+execute: 
+  eval: true
+  warning: false
+  echo: true
+  output: true
+  error: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{=html}
+<style type="text/css"> body {text-align: justify} </style>
+```
+
+## Second exercise
+The task of this exercise is to train model for ozone prediction with logistic_regresion.
+
+### Required packages
+```{r}
+library(tidymodels) 
+library(skimr) 
+library(GGally) 
+library(openair)
+library(DT) 
+library(dplyr)
+library(ranger)
+tidymodels_prefer()
+```
+
+### Data preparation
+
+```{r}
+
+air <- 
+  mydata |> 
+  selectByDate(year = 2002)
+air |> skim()
+
+air <- 
+  air |> na.omit()
+```
+
+### Changing Ozone to categorical data
+
+```{r}
+air <- 
+  air |>  
+  mutate(ozone = cut(
+  o3,
+  breaks = c(-0.1, 10, 53),
+  labels = c("Niskie", "Wysokie")
+  ))
+
+air |> 
+  select_if(is.numeric) |> 
+  cor(use = "complete.obs") |> as.data.frame() |> select(o3)
+```
+
+
+### Splitting the data
+
+```{r}
+
+set.seed(222)
+data_split <- initial_split(data=air, prop = 3/4, strata = ozone)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+```
+
+### checking the data
+
+```{r}
+ggplot(train_data, aes(x = date, y = o3)) + 
+  geom_line() + 
+  theme_minimal()
+```
+
+
+### Resampling V-fold CV, bootstrap
+
+```{r}
+set.seed(345)
+vcv_folds <- vfold_cv(data=train_data, v=10)
+vcv_folds_r5 <- vfold_cv(data=train_data, v=10, repeats = 5)
+bootstrap_folds <- bootstraps(data=train_data, times=5)
+```
+
+### Creating recipe for ozone classification model
+
+```{r}
+ozone_recipe <- 
+  recipe(ozone ~ ., data = train_data) |> 
+  update_role(o3, wd, date, pm10, pm25, so2, co, no2, new_role = "ID") |> 
+  step_BoxCox(ws, nox, no2) |>  # daje ten sam efet co metoda Yeo-Johnson
+  # step_normalize(ws, nox, no2) |> # nie pomaga 
+  step_date(date, features = c("month")) |> 
+  step_time(date, features = c("hour")) |>
+  step_mutate(date_hour = as.factor(date_hour)) |>  
+  step_dummy(all_nominal_predictors()) |> 
+  step_zv()
+```
+
+### Examine the recipe
+
+```{r}
+ozone_recipe |> summary()
+```
+```{r}
+ozone_recipe |> 
+  prep() |> 
+  bake(new_data = train_data) |> 
+  head(10) |> 
+  DT::datatable()
+```
+
+### Defining model
+
+```{r}
+lr_mod <-  
+  logistic_reg() |> 
+  set_engine("glm")
+
+rf_mod <-
+  rand_forest() |> 
+  set_engine("ranger") |> 
+  set_mode("classification")
+```
+
+### Creating workflow
+
+```{r}
+ozone_lr_work <- 
+  workflow() |> 
+  add_model(lr_mod) |> 
+  add_recipe(ozone_recipe)
+
+ozone_rf_work <- 
+  workflow() |> 
+  add_model(rf_mod) |> 
+  add_recipe(ozone_recipe)
+```
+
+### Tune
+
+```{r}
+lr_fit_vcv <- 
+  ozone_lr_work |> 
+  fit_resamples(vcv_folds)
+
+lr_fit_bootstrap <- 
+  ozone_lr_work |>
+  fit_resamples(bootstrap_folds) 
+
+lr_fit_vcv_r5 <- 
+  ozone_lr_work |> 
+  fit_resamples(vcv_folds_r5)
+
+rf_fit_vcv <- 
+  ozone_rf_work |> 
+  fit_resamples(vcv_folds)
+
+rf_fit_bootstrap <- 
+  ozone_rf_work |>
+  fit_resamples(bootstrap_folds) 
+
+rf_fit_vcv_r5 <- 
+  ozone_rf_work |> 
+  fit_resamples(vcv_folds_r5)
+```
+
+### Model without resampling
+
+```{r}
+ozone_work <- 
+  workflow() |> 
+  add_model(lr_mod) |> 
+  add_recipe(ozone_recipe)
+
+ozone_fit <- 
+  ozone_work |> 
+  fit(data=train_data)
+```
+
+### Prediction for model without resampling
+
+```{r}
+ozone_fit |> 
+  predict(test_data, type="prob")
+```
+
+### Concat fit with test data
+```{r}
+pred_test <- 
+  augment(ozone_fit, test_data) |>
+  select(-ws,
+         -wd,
+         -o3,
+         -nox,
+         -no2,
+         -pm10,
+         -pm25,
+         -so2,
+         -co,
+         -date)
+pred_test
+```
+
+
+### Display ROC curve
+```{r}
+pred_test  |> 
+  roc_curve(truth = ozone, .pred_Niskie) |> 
+  autoplot()
+```
+### Counting 'Niskie' and 'Wysokie' values in test set and prediction set
+```{r}
+pred_test |> count(ozone)
+pred_test |> count(.pred_class)
+```
+
+### Metrics
+```{r}
+metrics_without_resample <- bind_rows(
+  pred_test |>
+    roc_auc(truth = ozone, .pred_Niskie),
+  
+  pred_test |>
+    accuracy(truth = ozone, .pred_class)
+) |>
+  mutate(.approach = "no resampling")
+```
+
+### Metrics for models with resampling
+
+```{r}
+metrics_lr_vcv <- lr_fit_vcv|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "lr_vcv")
+```
+```{r}
+metrics_lr_vcv_r5 <- lr_fit_vcv_r5|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "lr_vcv_r5")
+```
+```{r}
+metrics_lr_bootstrap <- lr_fit_bootstrap|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "lr_bootstrap")
+```
+```{r}
+metrics_rf_vcv <- rf_fit_vcv|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_vcv")
+```
+```{r}
+metrics_rf_vcv_r5 <- rf_fit_vcv_r5|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_vcv_r5")
+```
+
+```{r}
+metrics_rf_bootstrap <- rf_fit_bootstrap|> 
+  collect_metrics() |> 
+  filter(.metric == "accuracy" | .metric == "roc_auc") |>
+  mutate(.approach = "rf_bootstrap")
+```
+
+```{r}
+# Combine all metrics into one large table
+all_metrics <- bind_rows(
+  metrics_without_resample,
+  metrics_lr_vcv,
+  metrics_lr_vcv_r5,
+  metrics_lr_bootstrap,
+  metrics_rf_vcv,
+  metrics_rf_vcv_r5,
+  metrics_rf_bootstrap
+)
+
+colnames(all_metrics)[
+  which(names(all_metrics) == ".estimate" |
+  names(all_metrics) == "mean")] <- "estimate/mean"
+
+columns_list <- lapply(
+  all_metrics, 
+  function(x) if(is.numeric(x)) 0 else "not applicable")
+
+all_metrics <- all_metrics |> replace_na(columns_list)
+
+# Display the combined table
+all_metrics |> knitr::kable(digits = 3)
+```
+
+## Conslusions:
+- The resampling models accuracy and roc_auc are lower then withuot using the resampling methods but are more realistic and stable;
+- Accuracy of the models with using the resampling methods equals around 90%, all of the models are almost exacly the same good for this prediction case;
+- In this case best resampling model was the one that included logistic_regression and V-fold Cross-Validation and the worst was the one with RandomForest model and bootstrap resampling method;
+
+
+Ja po mojej analizie doszedłem do następującego wniosku, a czy ty możesz stwierdzić to samo. 
+
+Wnioski nie każda metoda estymacji wymaga stosowania metody ponownego próbkowania. W przypadku prostej metody regresji logistycznej uzyskano podobne efekty. W przypadku metody lasu losowego efekty są wyraźne. Wyniki oceny dla zbioru treningowego wskazują na nadmierne dopasowanie w porównaniu do testowego.
