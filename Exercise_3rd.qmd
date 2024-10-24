@@ -41,7 +41,7 @@ editor_options:
 <style type="text/css"> body {text-align: justify} </style>
 ```
 
-## Second exercise
+## Third exercise
 The task of this exercise is to train model for ozone prediction with logistic_regresion.
 
 ### Required packages
