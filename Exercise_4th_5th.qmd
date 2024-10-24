@@ -40,7 +40,6 @@ editor_options:
 ```{=html}
 <style type="text/css"> body {text-align: justify} </style>
 ```
-
 ## Fourth/Fifth exercise
 The task of this exercise is to train model for ozone prediction with random forest that is tuned.
 
@@ -118,10 +117,9 @@ ggplot(train_data, aes(x = date, y = o3)) +
 
 ```{r}
 tune_spec <- 
-  rand_forest(
-    mtry = tune(), 
-    min_n = tune(),
-    trees = 1000) |>  
+  rand_forest(mtry = tune(),
+              min_n = tune(),
+              trees = 1000) |>
   set_engine(engine = "ranger",
   num.threads=parallel::detectCores() - 1) |> 
   set_mode("classification")
@@ -132,7 +130,7 @@ tune_spec <-
 
 ```{r}
 reg_grid  <- grid_regular(
-  mtry(),
+  mtry(range=c(1,10)),
   min_n(),
   levels=5)
 
