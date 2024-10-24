@@ -40,7 +40,6 @@ editor_options:
 ```{=html}
 <style type="text/css"> body {text-align: justify} </style>
 ```
-
 ## Fourth/Fifth exercise
 The task of this exercise is to train model for ozone prediction with random forest that is tuned.
 
@@ -118,10 +117,9 @@ ggplot(train_data, aes(x = date, y = o3)) +
 
 ```{r}
 tune_spec <- 
-  rand_forest(
-    mtry = tune(), 
-    min_n = tune(),
-    trees = 1000) |>  
+  rand_forest(mtry = tune(),
+              min_n = tune(),
+              trees = 1000) |>
   set_engine(engine = "ranger",
   num.threads=parallel::detectCores() - 1) |> 
   set_mode("classification")
@@ -132,8 +130,8 @@ tune_spec <-
 
 ```{r}
 reg_grid  <- grid_regular(
-  mtry(range = c(1, 10)),
-  trees(),
+  mtry(range=c(1,10)),
+  min_n(),
   levels=5)
 
 reg_grid
@@ -232,7 +230,7 @@ tune_fit
 ```{r}
 #| eval: false
 #| echo: false
-save(rf_fit_vcv_r5, tune_fit, "Exercise4_5.RData")
+save(rf_fit_vcv_r5, tune_fit, file="Exercise4_5.RData")
 
 ```
 
@@ -249,9 +247,9 @@ tune_fit  |> collect_metrics()
 ```{r}
 tune_fit |> 
   collect_metrics() |>
-  mutate(tree_depth = factor(tree_depth)) |>
-  ggplot(aes(cost_complexity, mean, color = tree_depth)) +
-  geom_line(size = 1.5, alpha = 0.6) +
+  mutate(mtry = factor(mtry)) |>
+  ggplot(aes(min_n, mean, color = mtry)) +
+  geom_line(linewidth = 1.5, alpha = 0.6) +
   geom_point(size = 2) +
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
   scale_x_log10(labels = scales::label_number()) +
@@ -336,18 +334,6 @@ pred_test <-
 pred_test
 ```
 
-
-### Display ROC curve
-```{r}
-pred_test  |> 
-  roc_curve(truth = ozone, .pred_Niskie) |> 
-  autoplot()
-```
-### Counting 'Niskie' and 'Wysokie' values in test set and prediction set
-```{r}
-pred_test |> count(ozone)
-pred_test |> count(.pred_class)
-```
 
 ### Metrics
 ```{r}
