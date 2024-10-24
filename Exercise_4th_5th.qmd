@@ -250,7 +250,7 @@ tune_fit  |> collect_metrics()
 tune_fit |> 
   collect_metrics() |>
   mutate(mtry = factor(mtry)) |>
-  ggplot(aes(n, mean, color = mtry)) +
+  ggplot(aes(min_n, mean, color = mtry)) +
   geom_line(linewidth = 1.5, alpha = 0.6) +
   geom_point(size = 2) +
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
