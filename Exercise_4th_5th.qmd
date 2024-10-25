@@ -121,7 +121,8 @@ tune_spec <-
               min_n = tune(),
               trees = 1000) |>
   set_engine(engine = "ranger",
-  num.threads=parallel::detectCores() - 1) |> 
+  num.threads=parallel::detectCores() - 1,
+  importance = "impurity") |> 
   set_mode("classification")
 ```
 
@@ -288,7 +289,7 @@ tune_best_fit |>
 tune_best_fit |> 
   extract_workflow() |> 
   extract_fit_parsnip() |>
-  vip() 
+  vip()
 ```
 
 ### Model without resampling & tuning
