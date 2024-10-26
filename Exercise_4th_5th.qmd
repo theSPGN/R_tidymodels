@@ -1,5 +1,5 @@
 ---
-title: "Tidymodels Exercise fourth"
+title: "Tidymodels Exercise fourth and fifth"
 author: "Mateusz Zajda"
 format: 
   html:
@@ -26,7 +26,7 @@ format:
     linestretch: 1.5
 date: today
 abstract-title: "About"
-abstract: "Exercise **third**"
+abstract: "Exercise **fourth and fifth**"
 execute: 
   eval: true
   warning: false
