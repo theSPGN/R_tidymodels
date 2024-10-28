@@ -187,7 +187,7 @@ dt_recipe <-
     update_role(date, pm10, pm25, new_role = "ID") |>
     step_date(date, features = c("month")) |> # change for new var
     step_time(date, features = c("hour")) |> # change for new var
-    step_rm(date) |> # remove date column
+    step_rm(date) # remove date column
 
 # random forest
 rf_recipe <-
@@ -197,5 +197,5 @@ rf_recipe <-
     step_time(date, features = c("hour")) |> # change for new var
     step_rm(date) |> # remove date column
     step_zv(all_predictors()) |> # remove colummns with single values
-    step_impute_knn(all_predictors()) |> # imputation of missing values
+    step_impute_knn(all_predictors()) # imputation of missing values
 ```
