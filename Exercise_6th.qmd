@@ -431,14 +431,14 @@ lin_fit |>
     vip(num_features = 20) +
     scale_x_discrete(expand = c(0, 0)) +
     scale_y_continuous(expand = c(0, 0)) +
-    geom_boxplot(color = "black", fill = "grey85") 
+    geom_boxplot(color = "black", fill = "grey85")
 
 dt_fit |>
     extract_fit_parsnip() |>
     vip(num_features = 20) +
     scale_x_discrete(expand = c(0, 0)) +
     scale_y_continuous(expand = c(0, 0)) +
-    geom_boxplot(color = "black", fill = "grey85") 
+    geom_boxplot(color = "black", fill = "grey85")
 
 rf_fit |>
     extract_fit_parsnip() |>
@@ -448,8 +448,8 @@ rf_fit |>
     geom_boxplot(color = "black", fill = "grey85")
 
 bind_rows(
-    lin_fit |> collect_metrics(),
-    dt_fit |> collect_metrics(),
-    rf_fit |> collect_metrics()
+    lin_fit |> collect_metrics() |> select(-.config) |> mutate(model = "linear_reg"),
+    dt_fit |> collect_metrics() |> select(-.config) |> mutate(model = "decision_tree"),
+    rf_fit |> collect_metrics() |> select(-.config) |> mutate(model = "rand_forest")
 ) |> knitr::kable(digits = 3)
 ```
