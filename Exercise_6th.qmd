@@ -48,7 +48,7 @@ o3 prediction using 3 different models
 # tidy data models library:
 library(tidymodels)
 # extension of ggplot2 for correlation graph:
-library(GGally) 
+library(GGally)
 # data for model creation:
 library(openair)
 # data manipulation library:
@@ -69,16 +69,26 @@ tidymodels_prefer()
 
 ```{r}
 # selecting the data from 2002
-air <- 
-  mydata |> 
-  selectByDate(year = 2002)
-air |> skim()
+air <-
+    mydata |>
+    selectByDate(year = 2002)
 
 # removing rows with na value
-air <- 
-  air |> na.omit()
+air <-
+    air |> na.omit()
 ```
 
+### Changing wind direction into categorical data
+```{r}
+air <- 
+    air |> mutate(
+        wd = cut(
+            wd,
+            breaks = 16,
+            labels = seq(1, 16)
+        )
+    )
+```
 ### Air variables correlations
 
 ```{r}
@@ -89,7 +99,6 @@ air <-
 # correlation graph to examinate importance of variables and relations between them
 air |> GGally::ggpairs()
 ```
-
 ### Splitting the data
 
 ```{r}
@@ -97,51 +106,96 @@ air |> GGally::ggpairs()
 set.seed(222)
 
 # splitting the data into the training nad testing partitions
-data_split <- initial_split(data=air, 
-  prop=3/4, 
-  strata=o3)
+data_split <- initial_split(
+    data = air,
+    prop = 3 / 4,
+    strata = o3
+)
 train_data <- training(data_split)
 test_data <- testing(data_split)
 
-# splitting the training into the validation set and actual training set 
-val_set  <- validation_split(data=train_data, 
-  prop=3/4, 
-  strata=o3)
+# splitting the training into the validation set and actual training set
+val_set <- validation_split(
+    data = train_data,
+    prop = 3 / 4,
+    strata = o3
+)
 ```
 
 ### Defining models:
 
 ```{r}
 # linear model:
-lr_mod <-
-  linear_reg(penalty=tune(),
-               mixture=tune()) |>
-  set_engine(
-    engine = "glmnet",
-    num.threads=parallel::detectCores() - 1) |>
-  set_mode("regression")
+lin_mod <-
+    linear_reg(
+        penalty = tune(),
+        mixture = tune()
+    ) |>
+    set_engine(
+        engine = "glmnet",
+        num.threads = parallel::detectCores() - 1
+    ) |>
+    set_mode("regression")
 
 # decision tree model::
-dt_mod <- 
-  decision_tree(
-    cost_complexity = tune(), 
-    tree_depth = tune(),
-    min_n = tune()) |> 
-  set_engine(
-    engine = "rpart",
-    num.threads=parallel::detectCores() - 1,
-    importance = "impurity" ) |> 
-  set_mode("regression")
+dt_mod <-
+    decision_tree(
+        cost_complexity = tune(),
+        tree_depth = tune(),
+        min_n = tune()
+    ) |>
+    set_engine(
+        engine = "rpart",
+        num.threads = parallel::detectCores() - 1,
+        importance = "impurity"
+    ) |>
+    set_mode("regression")
 
 # random forest model:
-rf_mod <- 
-  rand_forest(
-    mtry=tune(),
-    trees=tune(),
-    min_n=tune()) |>
-  set_engine(
-    engine = "ranger",
-    num.threads=parallel::detectCores() - 1,
-    importance = "impurity") |> 
-  set_mode("regression")
+rf_mod <-
+    rand_forest(
+        mtry = tune(),
+        trees = tune(),
+        min_n = tune()
+    ) |>
+    set_engine(
+        engine = "ranger",
+        num.threads = parallel::detectCores() - 1,
+        importance = "impurity"
+    ) |>
+    set_mode("regression")
+```
+
+### Recipes
+
+```{r}
+# linear regression
+lin_recipe <-
+    recipe(o3 ~ ., data = train_data) |>
+    update_role(date, pm10, pm25, new_role = "ID") |>
+    step_date(date, features = c("month")) |> # change for new var
+    step_time(date, features = c("hour")) |> # change for new var
+    step_rm(date) |> # remove date column
+    step_dummy(all_nominal_predictors()) |> # change categorical data into the binary 0/1 data
+    step_zv(all_predictors()) |> # remove colummns with single values
+    step_impute_knn(all_predictors()) |> # imputation of missing values
+    step_corr(all_predictors(), threshold = 0.7) # decorelation values
+
+# decision tree
+dt_recipe <-
+    recipe(o3 ~ ., data = train_data) |>
+    update_role(date, pm10, pm25, new_role = "ID") |>
+    step_date(date, features = c("month")) |> # change for new var
+    step_time(date, features = c("hour")) |> # change for new var
+    step_rm(date) |> # remove date column
+
+# random forest
+rf_recipe <-
+    recipe(o3 ~ ., data = train_data) |>
+    update_role(date, pm10, pm25, new_role = "ID") |>
+    step_date(date, features = c("month")) |> # change for new var
+    step_time(date, features = c("hour")) |> # change for new var
+    step_rm(date) |> # remove date column
+    step_zv(all_predictors()) |> # remove colummns with single values
+    step_impute_knn(all_predictors()) |> # imputation of missing values
 ```
