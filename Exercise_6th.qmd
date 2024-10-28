@@ -1,50 +1,52 @@
----
-title: "Tidymodels Exercise sixth"
-author: "Mateusz Zajda"
-format: 
-  html:
-    toc: true
-    toc-title: "contents"
-    number-depth: 5
-    number-sections: true
-    code-fold: show
-    code-summary: "Hide/Show code"
-    code-tools: true
-    code-block-border-left: "black"
-    code-line-numbers: true
-    code-copy: true
-    html-math-method: katex
-    smooth-scroll: true
-    self-contained: true
-    anchor-sections: true
-    link-external-icon: true
-    link-external-newwindow: true
-    theme: 
-      light: journal
-      dark: darkly
-    fontsize:  1.0em
-    linestretch: 1.5
-date: today
-abstract-title: "About"
-abstract: "Exercise **sixth**"
-execute: 
-  eval: true
-  warning: false
-  echo: true
-  output: true
-  error: false
-editor_options: 
-  chunk_output_type: console
----
+# linear model:
+lin_mod <-
+    linear_reg(
+        penalty = tune(),
+        mixture = tune()
+    ) |>
+    set_engine(
+        engine = "glmnet",
+        num.threads = parallel::detectCores() - 1
+    ) |>
+    set_mode("regression")
 
-```{=html}
+# decision tree model::
+dt_mod <-
+    decision_tree(
+        cost_complexity = tune(),
+        tree_depth = tune(),
+        min_n = tune()
+    ) |>
+    set_engine(
+        engine = "rpart",
+        num.threads = parallel::detectCores() - 1,
+        importance = "impurity"
+    ) |>
+    set_mode("regression")
+
+# random forest model:
+rf_mod <-
+    rand_forest(
+        mtry = tune(),
+        trees = tune(),
+        min_n = tune()
+    ) |>
+    set_engine(
+        engine = "ranger",
+        num.threads = parallel::detectCores() - 1,
+        importance = "impurity"
+    ) |>
+    set_mode("regression")
 <style type="text/css"> body {text-align: justify} </style>
 ```
 ## sixth exercise
 o3 prediction using 3 different models
 
 ### Required packages
+
+
 ```{r}
+
 # tidy data models library:
 library(tidymodels)
 # extension of ggplot2 for correlation graph:
@@ -145,9 +147,7 @@ dt_mod <-
         min_n = tune()
     ) |>
     set_engine(
-        engine = "rpart",
-        num.threads = parallel::detectCores() - 1,
-        importance = "impurity"
+        engine = "rpart"
     ) |>
     set_mode("regression")
 
@@ -181,6 +181,12 @@ lin_recipe <-
     step_impute_knn(all_predictors()) |> # imputation of missing values
     step_corr(all_predictors(), threshold = 0.7) # decorelation values
 
+lin_recipe |>
+    prep() |>
+    bake(train_data) |>
+    glimpse()
+
+
 # decision tree
 dt_recipe <-
     recipe(o3 ~ ., data = train_data) |>
@@ -188,6 +194,12 @@ dt_recipe <-
     step_date(date, features = c("month")) |> # change for new var
     step_time(date, features = c("hour")) |> # change for new var
     step_rm(date) # remove date column
+
+dt_recipe |>
+    prep() |>
+    bake(train_data) |>
+    glimpse()
+
 
 # random forest
 rf_recipe <-
@@ -198,4 +210,136 @@ rf_recipe <-
     step_rm(date) |> # remove date column
     step_zv(all_predictors()) |> # remove colummns with single values
     step_impute_knn(all_predictors()) # imputation of missing values
+
+rf_recipe |>
+    prep() |>
+    bake(train_data) |>
+    glimpse()
+```
+
+### Workflows
+
+```{r}
+lin_workflow <-
+    workflow() |>
+    add_model(lin_mod) |>
+    add_recipe(lin_recipe)
+
+dt_workflow <-
+    workflow() |>
+    add_model(dt_mod) |>
+    add_recipe(dt_recipe)
+
+rf_workflow <-
+    workflow() |>
+    add_model(rf_mod) |>
+    add_recipe(rf_recipe) 
+```
+
+### Grids
+
+```{r}
+lin_grid <-
+    grid_regular(
+        penalty(),
+        mixture(),
+        levels = 5
+    )
+
+dt_grid <-
+    grid_regular(
+        cost_complexity(),
+        tree_depth(),
+        min_n(),
+        levels = 5
+    )
+
+rf_grid <-
+    grid_regular(
+        mtry(range=c(1, 8)),
+        trees(),
+        min_n(),
+        levels = 5
+    )
+```
+
+### Tune models
+
+```{r}
+#| eval: false
+lin_res <-
+    lin_workflow |>
+    tune_grid(
+        resamples = val_set,
+        grid = lin_grid,
+        control = control_grid(save_pred = TRUE),
+        metrics = metric_set(mae)
+    )
+```
+
+```{r}
+#| eval: false
+dt_res <-
+    dt_workflow |>
+    tune_grid(
+        resamples = val_set,
+        grid = dt_grid,
+        control = control_grid(save_pred = TRUE),
+        metrics = metric_set(mae)
+    )
+```
+```{r}
+#| eval: false
+rf_res <-
+    rf_workflow |>
+    tune_grid(
+        resamples = val_set,
+        grid = rf_grid,
+        control = control_grid(save_pred = TRUE),
+        metrics = metric_set(mae)
+    )
+```
+
+
+```{r}
+#| eval: false
+#| echo: false
+save(lin_res, dt_res, rf_res, file="Exercise6.RData")
+
+```
+
+```{r}
+#| echo: false
+load("Exercise6.RData")
+```
+
+
+```{r}
+lin_top_models <-
+    lin_res |>
+    show_best(metric="mae", n = 15) |>
+    arrange(penalty) |>
+    mutate(mean = mean |> round(x = _, digits = 3))
+
+lin_top_models |> gt::gt()
+```
+
+```{r}
+dt_top_models <-
+    dt_res |>
+    show_best(metric="mae", n = 15) |>
+    arrange(tree_depth) |>
+    mutate(mean = mean |> round(x = _, digits = 3))
+
+dt_top_models |> gt::gt()
+```
+
+```{r}
+rf_top_models <-
+    rf_res |>
+    show_best(metric="mae", n = 15) |>
+    arrange(trees) |>
+    mutate(mean = mean |> round(x = _, digits = 3))
+
+rf_top_models |> gt::gt()
 ```
